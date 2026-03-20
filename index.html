@@ -121,17 +121,73 @@
       color: var(--muted);
       pointer-events: none;
     }
-    select {
+    /* ── Multi-select dropdown ── */
+    .ms-wrap { position: relative; }
+    .ms-btn {
       background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 7px;
-      padding: 8px 12px;
+      padding: 8px 28px 8px 12px;
       color: var(--text);
       font-size: 0.85rem;
       outline: none;
       cursor: pointer;
+      white-space: nowrap;
+      user-select: none;
+      position: relative;
+      min-width: 130px;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
-    select:focus { border-color: var(--accent); background: #fff; }
+    .ms-btn::after {
+      content: '▾';
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .ms-btn.active { border-color: var(--accent); background: #fff; }
+    .ms-btn .ms-badge {
+      background: var(--accent);
+      color: #fff;
+      border-radius: 10px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      line-height: 1.4;
+    }
+    .ms-panel {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      z-index: 100;
+      min-width: 180px;
+      max-height: 260px;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+    .ms-panel.open { display: block; }
+    .ms-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      font-size: 0.84rem;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .ms-option:hover { background: var(--surface2); }
+    .ms-option input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
+    .ms-divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
     .count-label {
       margin-left: auto;
       font-size: 0.82rem;
@@ -359,28 +415,11 @@
     <input type="text" id="search" placeholder="Search symbol or name…" />
   </div>
 
-  <select id="filter-asset">
-    <option value="">All Asset Classes</option>
-  </select>
-
-  <select id="filter-category">
-    <option value="">All Categories</option>
-  </select>
-
-  <select id="filter-geo">
-    <option value="">All Geographies</option>
-  </select>
-
-  <select id="filter-rating">
-    <option value="">All Ratings</option>
-    <option>A</option><option>A-</option>
-    <option>B+</option><option>B</option><option>B-</option>
-    <option>C+</option><option>C</option><option>C-</option>
-  </select>
-
-  <select id="filter-usecase">
-    <option value="">All Use Cases</option>
-  </select>
+  <div class="ms-wrap" id="ms-asset"></div>
+  <div class="ms-wrap" id="ms-category"></div>
+  <div class="ms-wrap" id="ms-geo"></div>
+  <div class="ms-wrap" id="ms-rating"></div>
+  <div class="ms-wrap" id="ms-usecase"></div>
 
   <span class="count-label" id="row-count"></span>
 </div>
@@ -467,19 +506,103 @@ let allData = [];
 let sortCol = '1 Year';
 let sortAsc = false;
 
+// ── Multi-select widget ──────────────────────────────────────────────────────
+const msState = {};  // id -> Set of selected values
+
+function buildMultiSelect(wrapperId, label, options) {
+  const wrap = document.getElementById(wrapperId);
+  msState[wrapperId] = new Set();
+
+  const btn = document.createElement('button');
+  btn.className = 'ms-btn';
+  btn.type = 'button';
+  btn.dataset.label = label;
+  btn.textContent = label;
+
+  const panel = document.createElement('div');
+  panel.className = 'ms-panel';
+
+  // "Clear" shortcut at top
+  const clearOpt = document.createElement('label');
+  clearOpt.className = 'ms-option';
+  clearOpt.innerHTML = `<input type="checkbox" checked data-clear> All`;
+  panel.appendChild(clearOpt);
+
+  const divider = document.createElement('hr');
+  divider.className = 'ms-divider';
+  panel.appendChild(divider);
+
+  options.forEach(val => {
+    const lbl = document.createElement('label');
+    lbl.className = 'ms-option';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = val;
+    lbl.appendChild(cb);
+    lbl.appendChild(document.createTextNode(val));
+    panel.appendChild(lbl);
+  });
+
+  function updateBtn() {
+    const sel = msState[wrapperId];
+    btn.textContent = '';
+    if (sel.size === 0) {
+      btn.textContent = btn.dataset.label;
+    } else {
+      btn.textContent = btn.dataset.label;
+      const badge = document.createElement('span');
+      badge.className = 'ms-badge';
+      badge.textContent = sel.size;
+      btn.appendChild(badge);
+      btn.classList.add('active');
+    }
+    if (sel.size === 0) btn.classList.remove('active');
+    // sync "All" checkbox
+    clearOpt.querySelector('input').checked = sel.size === 0;
+  }
+
+  panel.addEventListener('change', e => {
+    const cb = e.target;
+    if (cb.dataset.clear !== undefined) {
+      // clear all
+      msState[wrapperId].clear();
+      panel.querySelectorAll('input:not([data-clear])').forEach(c => c.checked = false);
+    } else {
+      if (cb.checked) msState[wrapperId].add(cb.value);
+      else msState[wrapperId].delete(cb.value);
+    }
+    updateBtn();
+    render();
+  });
+
+  // Toggle panel
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const isOpen = panel.classList.contains('open');
+    // close all panels first
+    document.querySelectorAll('.ms-panel.open').forEach(p => p.classList.remove('open'));
+    document.querySelectorAll('.ms-btn').forEach(b => b.classList.toggle('active', msState[b.closest('.ms-wrap').id]?.size > 0));
+    if (!isOpen) panel.classList.add('open');
+  });
+
+  wrap.appendChild(btn);
+  wrap.appendChild(panel);
+}
+
+// Close panels when clicking outside
+document.addEventListener('click', () => {
+  document.querySelectorAll('.ms-panel.open').forEach(p => p.classList.remove('open'));
+});
+
 // ── Populate filter dropdowns ───────────────────────────────────────────────
 function populateFilters(data) {
   const unique = (key) => [...new Set(data.map(d => d[key]).filter(Boolean))].sort();
 
-  ['filter-asset', 'filter-category', 'filter-geo', 'filter-usecase'].forEach((id, i) => {
-    const key = ['Asset Class', 'Primary Category', 'Geography', 'Use Case'][i];
-    const sel = document.getElementById(id);
-    unique(key).forEach(v => {
-      const o = document.createElement('option');
-      o.value = v; o.textContent = v;
-      sel.appendChild(o);
-    });
-  });
+  buildMultiSelect('ms-asset',    'Asset Class',      unique('Asset Class'));
+  buildMultiSelect('ms-category', 'Category',         unique('Primary Category'));
+  buildMultiSelect('ms-geo',      'Geography',        unique('Geography'));
+  buildMultiSelect('ms-rating',   'Rating',           ['A','A-','B+','B','B-','C+','C','C-']);
+  buildMultiSelect('ms-usecase',  'Use Case',         unique('Use Case'));
 }
 
 // ── Pinned tickers ───────────────────────────────────────────────────────────
@@ -532,19 +655,19 @@ function updateStats(data) {
 // ── Filter + sort ────────────────────────────────────────────────────────────
 function getFiltered() {
   const q = document.getElementById('search').value.toLowerCase();
-  const asset = document.getElementById('filter-asset').value;
-  const category = document.getElementById('filter-category').value;
-  const geo = document.getElementById('filter-geo').value;
-  const rating = document.getElementById('filter-rating').value;
-  const usecase = document.getElementById('filter-usecase').value;
+  const asset    = msState['ms-asset']    || new Set();
+  const category = msState['ms-category'] || new Set();
+  const geo      = msState['ms-geo']      || new Set();
+  const rating   = msState['ms-rating']   || new Set();
+  const usecase  = msState['ms-usecase']  || new Set();
 
   let rows = allData.filter(d => {
     if (q && !d['Symbol'].toLowerCase().includes(q) && !d['ETF Name'].toLowerCase().includes(q)) return false;
-    if (asset && d['Asset Class'] !== asset) return false;
-    if (category && d['Primary Category'] !== category) return false;
-    if (geo && d['Geography'] !== geo) return false;
-    if (rating && d['Returns Rating'] !== rating) return false;
-    if (usecase && d['Use Case'] !== usecase) return false;
+    if (asset.size    && !asset.has(d['Asset Class']))      return false;
+    if (category.size && !category.has(d['Primary Category'])) return false;
+    if (geo.size      && !geo.has(d['Geography']))          return false;
+    if (rating.size   && !rating.has(d['Returns Rating']))  return false;
+    if (usecase.size  && !usecase.has(d['Use Case']))       return false;
     return true;
   });
 
@@ -605,9 +728,7 @@ document.querySelectorAll('th[data-col]').forEach(th => {
 });
 
 // ── Filter listeners ──────────────────────────────────────────────────────────
-['search','filter-asset','filter-category','filter-geo','filter-rating','filter-usecase'].forEach(id => {
-  document.getElementById(id).addEventListener('input', render);
-});
+document.getElementById('search').addEventListener('input', render);
 
 // Default sorted header highlight
 document.querySelector('th[data-col="1 Year"]').classList.add('sorted');
