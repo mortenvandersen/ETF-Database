@@ -222,12 +222,82 @@
       font-size: 0.85rem;
     }
 
+    /* ── Pinned Tickers ── */
+    .pinned-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+    .pinned-header {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .pinned-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .pinned-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .pinned-card-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .pinned-symbol {
+      font-weight: 700;
+      color: var(--accent);
+      font-size: 0.95rem;
+    }
+    .pinned-name {
+      font-size: 0.72rem;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pinned-rets {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 2px;
+    }
+    .pinned-ret-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+    }
+    .pinned-ret-label {
+      font-size: 0.62rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
     /* Responsive */
     @media (max-width: 900px) {
       .stats { grid-template-columns: repeat(3, 1fr); }
+      .pinned-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 600px) {
       .stats { grid-template-columns: repeat(2, 1fr); }
+      .pinned-grid { grid-template-columns: repeat(2, 1fr); }
       .etf-name { max-width: 140px; }
       .header { flex-wrap: wrap; }
       #last-updated { margin-left: 0; }
@@ -240,6 +310,17 @@
   <h1>ETF Dashboard</h1>
   <p>Browse, filter, and sort your ETF database</p>
   <div id="last-updated"></div>
+</div>
+
+<!-- Pinned Reference Tickers -->
+<div class="pinned-section">
+  <div class="pinned-header">Reference Tickers</div>
+  <div class="pinned-grid" id="pinned-grid">
+    <div class="pinned-card"><span class="pinned-symbol">DIA</span><span class="pinned-name">Loading…</span></div>
+    <div class="pinned-card"><span class="pinned-symbol">IVV</span><span class="pinned-name">Loading…</span></div>
+    <div class="pinned-card"><span class="pinned-symbol">ONEQ</span><span class="pinned-name">Loading…</span></div>
+    <div class="pinned-card"><span class="pinned-symbol">VTI</span><span class="pinned-name">Loading…</span></div>
+  </div>
 </div>
 
 <!-- Stats -->
@@ -401,6 +482,33 @@ function populateFilters(data) {
   });
 }
 
+// ── Pinned tickers ───────────────────────────────────────────────────────────
+const PINNED_TICKERS = ['DIA', 'IVV', 'ONEQ', 'VTI'];
+
+function renderPinned(data) {
+  const grid = document.getElementById('pinned-grid');
+  grid.innerHTML = PINNED_TICKERS.map(sym => {
+    const d = data.find(r => r['Symbol'] === sym);
+    if (!d) return `<div class="pinned-card"><span class="pinned-symbol">${sym}</span><span class="pinned-name">Not found in dataset</span></div>`;
+    return `
+      <div class="pinned-card">
+        <div class="pinned-card-top">
+          <span class="pinned-symbol">${sym}</span>
+          ${fmtRating(d['Returns Rating'])}
+        </div>
+        <div class="pinned-name" title="${d['ETF Name']}">${d['ETF Name']}</div>
+        <div class="pinned-rets">
+          <div class="pinned-ret-item"><span class="pinned-ret-label">1 Wk</span>${fmtRet(d['1 Week'])}</div>
+          <div class="pinned-ret-item"><span class="pinned-ret-label">1 Mo</span>${fmtRet(d['1 Month'])}</div>
+          <div class="pinned-ret-item"><span class="pinned-ret-label">1 Yr</span>${fmtRet(d['1 Year'])}</div>
+          <div class="pinned-ret-item"><span class="pinned-ret-label">3 Yr</span>${fmtRet(d['3 Year'])}</div>
+          <div class="pinned-ret-item"><span class="pinned-ret-label">Div</span>${fmtRet(d['Annual Dividend Yield %'])}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 // ── Stats cards ─────────────────────────────────────────────────────────────
 function updateStats(data) {
   document.getElementById('stat-total').textContent = data.length;
@@ -516,6 +624,7 @@ fetch(CSV_FILE)
   .then(text => {
     allData = parseCSV(text);
     populateFilters(allData);
+    renderPinned(allData);
     document.getElementById('status').style.display = 'none';
     document.getElementById('etf-table').style.display = '';
 
