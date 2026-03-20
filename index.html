@@ -323,7 +323,7 @@
         <th data-col="P/E Ratio" class="ret">P/E <span class="sort-arrow">↕</span></th>
         <th data-col="# of Holdings" class="ret">Holdings <span class="sort-arrow">↕</span></th>
         <th data-col="Returns Rating">Rating <span class="sort-arrow">↕</span></th>
-        <th data-col="Use Case">Use Case <span class="sort-arrow">↕</span></th>
+        <th data-col="Primary Category">Category <span class="sort-arrow">↕</span></th>
       </tr>
     </thead>
     <tbody id="table-body"></tbody>
@@ -478,7 +478,7 @@ function render() {
       <td style="text-align:right;color:var(--muted)">${d['P/E Ratio'] || '—'}</td>
       <td style="text-align:right;color:var(--muted)">${d['# of Holdings'] || '—'}</td>
       <td>${fmtRating(d['Returns Rating'])}</td>
-      <td style="font-size:.8rem;color:var(--muted)">${d['Use Case'] || '—'}</td>
+      <td style="font-size:.8rem;color:var(--muted)">${d['Primary Category'] || '—'}</td>
     </tr>
   `).join('');
 }
