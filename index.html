@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ETF Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #222536;
+      --border: #2e3148;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --accent: #6366f1;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+
+    /* ── Header ── */
+    .header { margin-bottom: 28px; }
+    .header h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.5px; }
+    .header p { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+    #last-updated { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Stat Cards ── */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+    }
+    .stat-card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-card .value { font-size: 1.6rem; font-weight: 700; margin-top: 4px; }
+    .stat-card .sub { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Controls ── */
+    .controls {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin-bottom: 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+    .search-wrap { position: relative; flex: 1; min-width: 200px; }
+    .search-wrap input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px 8px 36px;
+      color: var(--text);
+      font-size: 0.9rem;
+      outline: none;
+    }
+    .search-wrap input:focus { border-color: var(--accent); }
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+    }
+    select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-size: 0.87rem;
+      outline: none;
+      cursor: pointer;
+    }
+    select:focus { border-color: var(--accent); }
+    .count-label { margin-left: auto; font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
+
+    /* ── Table ── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: auto;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    thead { position: sticky; top: 0; z-index: 2; }
+    th {
+      background: var(--surface2);
+      padding: 11px 14px;
+      text-align: left;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      white-space: nowrap;
+      user-select: none;
+      border-bottom: 1px solid var(--border);
+    }
+    th:hover { color: var(--text); }
+    th.sorted { color: var(--accent); }
+    th .sort-arrow { margin-left: 4px; opacity: 0.5; }
+    th.sorted .sort-arrow { opacity: 1; }
+
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface2); }
+    td { padding: 10px 14px; white-space: nowrap; }
+
+    .symbol { font-weight: 700; color: var(--accent); font-size: 0.9rem; }
+    .etf-name { max-width: 240px; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+
+    /* Return coloring */
+    .ret { font-variant-numeric: tabular-nums; text-align: right; }
+    .pos { color: var(--green); }
+    .neg { color: var(--red); }
+    .neu { color: var(--muted); }
+
+    /* Rating badge */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-A  { background: rgba(34,197,94,.18); color: var(--green); }
+    .badge-B  { background: rgba(99,102,241,.18); color: #818cf8; }
+    .badge-C  { background: rgba(245,158,11,.18); color: var(--yellow); }
+    .badge-D  { background: rgba(239,68,68,.18); color: var(--red); }
+
+    /* Asset class pill */
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 0.73rem;
+      font-weight: 500;
+    }
+    .pill-Equity      { background: rgba(99,102,241,.2); color: #a5b4fc; }
+    .pill-Bond        { background: rgba(34,197,94,.15); color: #86efac; }
+    .pill-Commodity   { background: rgba(245,158,11,.18); color: #fcd34d; }
+    .pill-Real\ Estate { background: rgba(239,68,68,.15); color: #fca5a5; }
+    .pill-Multi-Asset { background: rgba(168,85,247,.18); color: #d8b4fe; }
+
+    /* Loading / Error */
+    .status-msg { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 1rem; }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .etf-name { max-width: 140px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>ETF Dashboard</h1>
+  <p>Browse, filter, and sort your ETF database</p>
+  <div id="last-updated"></div>
+</div>
+
+<!-- Stats -->
+<div class="stats">
+  <div class="stat-card">
+    <div class="label">Total ETFs</div>
+    <div class="value" id="stat-total">—</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Avg Dividend Yield</div>
+    <div class="value" id="stat-div">—</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Avg 1-Year Return</div>
+    <div class="value" id="stat-1y">—</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Rating A / A-</div>
+    <div class="value" id="stat-a">—</div>
+    <div class="sub">top-rated ETFs</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Asset Classes</div>
+    <div class="value" id="stat-classes">—</div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <div class="search-wrap">
+    <span class="search-icon">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+    </span>
+    <input type="text" id="search" placeholder="Search symbol or name…" />
+  </div>
+
+  <select id="filter-asset">
+    <option value="">All Asset Classes</option>
+  </select>
+
+  <select id="filter-geo">
+    <option value="">All Geographies</option>
+  </select>
+
+  <select id="filter-rating">
+    <option value="">All Ratings</option>
+    <option>A</option><option>A-</option>
+    <option>B+</option><option>B</option><option>B-</option>
+    <option>C+</option><option>C</option><option>C-</option>
+  </select>
+
+  <select id="filter-usecase">
+    <option value="">All Use Cases</option>
+  </select>
+
+  <span class="count-label" id="row-count"></span>
+</div>
+
+<!-- Table -->
+<div class="table-wrap">
+  <div class="status-msg" id="status">Loading ETF data…</div>
+  <table id="etf-table" style="display:none">
+    <thead>
+      <tr>
+        <th data-col="Symbol">Symbol <span class="sort-arrow">↕</span></th>
+        <th data-col="ETF Name">Name <span class="sort-arrow">↕</span></th>
+        <th data-col="Asset Class">Asset Class <span class="sort-arrow">↕</span></th>
+        <th data-col="Geography">Geography <span class="sort-arrow">↕</span></th>
+        <th data-col="1 Week" class="ret">1 Wk <span class="sort-arrow">↕</span></th>
+        <th data-col="1 Month" class="ret">1 Mo <span class="sort-arrow">↕</span></th>
+        <th data-col="1 Year" class="ret">1 Yr <span class="sort-arrow">↕</span></th>
+        <th data-col="3 Year" class="ret">3 Yr <span class="sort-arrow">↕</span></th>
+        <th data-col="5 Year" class="ret">5 Yr <span class="sort-arrow">↕</span></th>
+        <th data-col="Annual Dividend Yield %" class="ret">Div Yield <span class="sort-arrow">↕</span></th>
+        <th data-col="P/E Ratio" class="ret">P/E <span class="sort-arrow">↕</span></th>
+        <th data-col="# of Holdings" class="ret">Holdings <span class="sort-arrow">↕</span></th>
+        <th data-col="Returns Rating">Rating <span class="sort-arrow">↕</span></th>
+        <th data-col="Use Case">Use Case <span class="sort-arrow">↕</span></th>
+      </tr>
+    </thead>
+    <tbody id="table-body"></tbody>
+  </table>
+</div>
+
+<script>
+// ── CSV parser (handles quoted fields) ──────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  const headers = parseRow(lines[0]);
+  return lines.slice(1).map(line => {
+    const vals = parseRow(line);
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (vals[i] ?? '').trim());
+    return obj;
+  }).filter(r => r['Symbol']);
+}
+
+function parseRow(line) {
+  const result = [];
+  let cur = '', inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQuote = !inQuote; continue; }
+    if (c === ',' && !inQuote) { result.push(cur); cur = ''; continue; }
+    cur += c;
+  }
+  result.push(cur);
+  return result;
+}
+
+// ── Parse percent/number ────────────────────────────────────────────────────
+function toNum(val) {
+  if (!val || val === '') return null;
+  return parseFloat(val.replace('%', ''));
+}
+
+// ── Format helpers ──────────────────────────────────────────────────────────
+function fmtRet(val) {
+  if (!val || val.trim() === '') return '<span class="neu">—</span>';
+  const n = toNum(val);
+  if (n === null) return '<span class="neu">—</span>';
+  const cls = n > 0 ? 'pos' : n < 0 ? 'neg' : 'neu';
+  return `<span class="ret ${cls}">${n > 0 ? '+' : ''}${n.toFixed(2)}%</span>`;
+}
+
+function fmtRating(r) {
+  if (!r) return '';
+  const cat = r.startsWith('A') ? 'A' : r.startsWith('B') ? 'B' : r.startsWith('C') ? 'C' : 'D';
+  return `<span class="badge badge-${cat}">${r}</span>`;
+}
+
+function fmtAsset(a) {
+  return `<span class="pill pill-${CSS.escape(a)}">${a || '—'}</span>`;
+}
+
+// ── State ───────────────────────────────────────────────────────────────────
+let allData = [];
+let sortCol = '1 Year';
+let sortAsc = false;
+
+// ── Populate filter dropdowns ───────────────────────────────────────────────
+function populateFilters(data) {
+  const unique = (key) => [...new Set(data.map(d => d[key]).filter(Boolean))].sort();
+
+  ['filter-asset', 'filter-geo', 'filter-usecase'].forEach((id, i) => {
+    const key = ['Asset Class', 'Geography', 'Use Case'][i];
+    const sel = document.getElementById(id);
+    unique(key).forEach(v => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      sel.appendChild(o);
+    });
+  });
+}
+
+// ── Stats cards ─────────────────────────────────────────────────────────────
+function updateStats(data) {
+  document.getElementById('stat-total').textContent = data.length;
+
+  const divs = data.map(d => toNum(d['Annual Dividend Yield %'])).filter(n => n !== null);
+  document.getElementById('stat-div').textContent =
+    divs.length ? (divs.reduce((a,b)=>a+b,0)/divs.length).toFixed(2)+'%' : '—';
+
+  const yrs = data.map(d => toNum(d['1 Year'])).filter(n => n !== null);
+  const avg1y = yrs.length ? yrs.reduce((a,b)=>a+b,0)/yrs.length : null;
+  const el1y = document.getElementById('stat-1y');
+  el1y.textContent = avg1y !== null ? (avg1y > 0 ? '+' : '') + avg1y.toFixed(2)+'%' : '—';
+  el1y.style.color = avg1y > 0 ? 'var(--green)' : avg1y < 0 ? 'var(--red)' : '';
+
+  const topRated = data.filter(d => d['Returns Rating'] === 'A' || d['Returns Rating'] === 'A-').length;
+  document.getElementById('stat-a').textContent = topRated;
+
+  const classes = new Set(data.map(d => d['Asset Class']).filter(Boolean)).size;
+  document.getElementById('stat-classes').textContent = classes;
+}
+
+// ── Filter + sort ────────────────────────────────────────────────────────────
+function getFiltered() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const asset = document.getElementById('filter-asset').value;
+  const geo = document.getElementById('filter-geo').value;
+  const rating = document.getElementById('filter-rating').value;
+  const usecase = document.getElementById('filter-usecase').value;
+
+  let rows = allData.filter(d => {
+    if (q && !d['Symbol'].toLowerCase().includes(q) && !d['ETF Name'].toLowerCase().includes(q)) return false;
+    if (asset && d['Asset Class'] !== asset) return false;
+    if (geo && d['Geography'] !== geo) return false;
+    if (rating && d['Returns Rating'] !== rating) return false;
+    if (usecase && d['Use Case'] !== usecase) return false;
+    return true;
+  });
+
+  rows.sort((a, b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    // numeric cols
+    const nv = toNum(va), nb = toNum(vb);
+    if (nv !== null || nb !== null) {
+      const na2 = nv ?? -Infinity, nb2 = nb ?? -Infinity;
+      return sortAsc ? na2 - nb2 : nb2 - na2;
+    }
+    // string
+    va = (va ?? '').toLowerCase(); vb = (vb ?? '').toLowerCase();
+    return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+  });
+
+  return rows;
+}
+
+// ── Render table ─────────────────────────────────────────────────────────────
+function render() {
+  const rows = getFiltered();
+  document.getElementById('row-count').textContent = `${rows.length} ETFs`;
+  updateStats(rows);
+
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = rows.map(d => `
+    <tr>
+      <td class="symbol">${d['Symbol']}</td>
+      <td><div class="etf-name" title="${d['ETF Name']}">${d['ETF Name']}</div></td>
+      <td>${fmtAsset(d['Asset Class'])}</td>
+      <td style="color:var(--muted);font-size:.82rem">${d['Geography'] || '—'}</td>
+      <td>${fmtRet(d['1 Week'])}</td>
+      <td>${fmtRet(d['1 Month'])}</td>
+      <td>${fmtRet(d['1 Year'])}</td>
+      <td>${fmtRet(d['3 Year'])}</td>
+      <td>${fmtRet(d['5 Year'])}</td>
+      <td>${fmtRet(d['Annual Dividend Yield %'])}</td>
+      <td style="text-align:right;color:var(--muted)">${d['P/E Ratio'] || '—'}</td>
+      <td style="text-align:right;color:var(--muted)">${d['# of Holdings'] || '—'}</td>
+      <td>${fmtRating(d['Returns Rating'])}</td>
+      <td style="font-size:.8rem;color:var(--muted)">${d['Use Case'] || '—'}</td>
+    </tr>
+  `).join('');
+}
+
+// ── Sort headers ──────────────────────────────────────────────────────────────
+document.querySelectorAll('th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (sortCol === col) sortAsc = !sortAsc;
+    else { sortCol = col; sortAsc = false; }
+    document.querySelectorAll('th').forEach(t => t.classList.remove('sorted'));
+    th.classList.add('sorted');
+    th.querySelector('.sort-arrow').textContent = sortAsc ? '↑' : '↓';
+    render();
+  });
+});
+
+// ── Filter listeners ──────────────────────────────────────────────────────────
+['search','filter-asset','filter-geo','filter-rating','filter-usecase'].forEach(id => {
+  document.getElementById(id).addEventListener('input', render);
+});
+
+// Default sorted header highlight
+document.querySelector('th[data-col="1 Year"]').classList.add('sorted');
+document.querySelector('th[data-col="1 Year"] .sort-arrow').textContent = '↓';
+
+// ── Load CSV ──────────────────────────────────────────────────────────────────
+const CSV_FILE = 'ETF Long List - ETF Database.csv';
+
+fetch(CSV_FILE)
+  .then(r => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.text();
+  })
+  .then(text => {
+    allData = parseCSV(text);
+    populateFilters(allData);
+    document.getElementById('status').style.display = 'none';
+    document.getElementById('etf-table').style.display = '';
+
+    // Show file load date
+    document.getElementById('last-updated').textContent =
+      `${allData.length} ETFs loaded · Data file: ${CSV_FILE}`;
+
+    render();
+  })
+  .catch(err => {
+    document.getElementById('status').innerHTML = `
+      <strong>Could not load CSV file.</strong><br><br>
+      ${err.message}<br><br>
+      <em>If opening locally, run a simple web server:<br>
+      <code>python -m http.server 8000</code><br>
+      then open <code>http://localhost:8000</code></em>
+    `;
+  });
+</script>
+</body>
+</html>
