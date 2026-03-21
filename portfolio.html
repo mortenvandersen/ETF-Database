@@ -352,6 +352,14 @@
       </tbody>
     </table>
   </div>
+  <div class="table-actions" style="margin-bottom:8px">
+    <label style="font-size:0.83rem;color:var(--muted);margin-right:6px">Total to invest:</label>
+    <input id="total-invest-input" type="number" min="0" step="100" placeholder="e.g. 50000"
+           style="width:130px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;
+                  background:var(--bg-card);color:var(--text);font-size:0.9rem" />
+    <button class="btn btn-accent btn-sm" id="distribute-btn" style="margin-left:6px">Adjust</button>
+    <span style="font-size:0.78rem;color:var(--muted);margin-left:8px" id="distribute-hint"></span>
+  </div>
   <div class="table-actions">
     <button class="btn btn-accent" id="add-row-btn">+ Add ETF</button>
     <button class="btn btn-ghost" id="clear-btn">Clear all</button>
@@ -963,6 +971,19 @@ function renderRows() {
     });
   });
 }
+
+// ── Distribute evenly ─────────────────────────────────────────────────────────
+document.getElementById('distribute-btn').addEventListener('click', () => {
+  const total = parseFloat(document.getElementById('total-invest-input').value);
+  const hint  = document.getElementById('distribute-hint');
+  if (!total || total <= 0) { hint.textContent = 'Enter a valid total first.'; return; }
+  const active = rows.filter(r => r.symbol && etfMap[r.symbol]);
+  if (active.length === 0) { hint.textContent = 'Add at least one valid ETF first.'; return; }
+  const each = total / active.length;
+  active.forEach(r => { r.amount = each; });
+  hint.textContent = `$${each.toLocaleString(undefined,{maximumFractionDigits:2})} × ${active.length} holdings`;
+  renderRows(); recalc(); savePortfolio();
+});
 
 // ── Button handlers ───────────────────────────────────────────────────────────
 document.getElementById('add-row-btn').addEventListener('click', () => {
