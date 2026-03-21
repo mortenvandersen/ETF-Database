@@ -740,7 +740,7 @@ function render() {
   // Wire up add-to-portfolio buttons
   tbody.querySelectorAll('.add-btn').forEach(btn => {
     const sym = btn.dataset.sym;
-    if (portfolioQueue().includes(sym)) { btn.textContent = '✓ Added'; btn.classList.add('added'); }
+    if (inPortfolio(sym)) { btn.textContent = '✓ Added'; btn.classList.add('added'); }
     btn.addEventListener('click', () => {
       if (btn.classList.contains('added')) return;
       const q = portfolioQueue();
@@ -753,6 +753,18 @@ function render() {
 function portfolioQueue() {
   try { return JSON.parse(localStorage.getItem('etf-portfolio-queue') || '[]'); } catch { return []; }
 }
+
+function inPortfolio(sym) {
+  try {
+    const saved = JSON.parse(localStorage.getItem('etf-portfolio-save') || '[]');
+    return saved.some(r => r.symbol && r.symbol.toUpperCase() === sym.toUpperCase());
+  } catch { return false; }
+}
+
+// Re-render buttons whenever the portfolio changes (e.g. ETF removed in builder tab)
+window.addEventListener('storage', e => {
+  if (e.key === 'etf-portfolio-save') render();
+});
 
 // ── Sort headers ──────────────────────────────────────────────────────────────
 document.querySelectorAll('th[data-col]').forEach(th => {
