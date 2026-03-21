@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portfolio Builder — ETF Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f0f2f5;
+      --surface: #ffffff;
+      --surface2: #f7f8fa;
+      --border: #e4e7ec;
+      --text: #1e2a38;
+      --muted: #7a8899;
+      --accent: #00b4c5;
+      --green: #0ea86a;
+      --red: #d94040;
+      --yellow: #e09800;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 28px 20px;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.3px; }
+    .header p  { color: var(--muted); font-size: 0.88rem; }
+    .nav-link {
+      margin-left: auto;
+      font-size: 0.83rem;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      border: 1px solid var(--accent);
+      border-radius: 7px;
+      padding: 6px 14px;
+      white-space: nowrap;
+    }
+    .nav-link:hover { background: var(--accent); color: #fff; }
+
+    /* ── Summary cards ── */
+    .summary-cards {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 900px) { .summary-cards { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 600px) { .summary-cards { grid-template-columns: repeat(2, 1fr); } }
+
+    .stat-card {
+      border-radius: 10px;
+      padding: 18px 16px;
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      right: -16px; top: -16px;
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.12);
+    }
+    .stat-card .label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      opacity: 0.88;
+      font-weight: 600;
+    }
+    .stat-card .value { font-size: 1.7rem; font-weight: 700; margin-top: 6px; line-height: 1; }
+    .stat-card .sub   { font-size: 0.73rem; opacity: 0.8; margin-top: 4px; }
+
+    .card-teal   { background: linear-gradient(135deg, #00b4c5, #0090a0); }
+    .card-pink   { background: linear-gradient(135deg, #e0297a, #b81f60); }
+    .card-green  { background: linear-gradient(135deg, #00a86b, #007a4e); }
+    .card-orange { background: linear-gradient(135deg, #f5a623, #d4861a); }
+    .card-navy   { background: linear-gradient(135deg, #3a6bc4, #2a52a0); }
+
+    /* ── Builder table ── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+    .panel-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 16px;
+      letter-spacing: -0.1px;
+    }
+
+    .builder-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    .builder-table th {
+      text-align: left;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      border-bottom: 2px solid var(--border);
+      padding: 8px 10px;
+      white-space: nowrap;
+    }
+    .builder-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .builder-table tr:last-child td { border-bottom: none; }
+    .builder-table tr:hover td { background: var(--surface2); }
+
+    /* inputs inside table */
+    .sym-input, .alloc-input {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 0.82rem;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+    }
+    .sym-input { width: 90px; text-transform: uppercase; font-weight: 700; }
+    .alloc-input { width: 100px; text-align: right; }
+    .sym-input:focus, .alloc-input:focus { border-color: var(--accent); background: #fff; }
+    .sym-input.error { border-color: var(--red); background: #fff5f5; }
+    .sym-input.ok    { border-color: var(--green); }
+
+    .etf-name-cell { color: var(--muted); font-size: 0.78rem; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .alloc-pct { color: var(--muted); font-size: 0.78rem; }
+
+    .btn {
+      border: none;
+      border-radius: 7px;
+      padding: 8px 16px;
+      font-size: 0.83rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-accent   { background: var(--accent); color: #fff; }
+    .btn-accent:hover { background: #009aaa; }
+    .btn-ghost    { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+    .btn-ghost:hover  { background: var(--surface2); color: var(--text); }
+    .btn-danger   { background: transparent; color: var(--red); border: none; font-size: 1rem; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+    .btn-danger:hover { background: #fff5f5; }
+
+    .table-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+      align-items: center;
+    }
+
+    /* metric pills */
+    .pill {
+      display: inline-block;
+      border-radius: 10px;
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .pill-green  { background: #e6f7ef; color: #0a7a4e; }
+    .pill-yellow { background: #fff8e0; color: #9a6500; }
+    .pill-red    { background: #fdecea; color: #b52f2f; }
+    .pill-grey   { background: var(--surface2); color: var(--muted); }
+
+    /* ── Charts row ── */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 800px) { .charts-row { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 520px) { .charts-row { grid-template-columns: 1fr; } }
+
+    .chart-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+    .chart-panel .panel-title { margin-bottom: 10px; }
+    .chart-wrap { position: relative; height: 180px; }
+
+    /* ── Cost projection table ── */
+    .cost-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+    .cost-table th {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      font-weight: 700;
+      text-align: right;
+      padding: 6px 10px;
+      border-bottom: 2px solid var(--border);
+    }
+    .cost-table th:first-child { text-align: left; }
+    .cost-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+    .cost-table td:first-child { text-align: left; font-weight: 600; }
+    .cost-table tr:last-child td { border-bottom: none; font-weight: 700; color: var(--red); }
+
+    /* ── Empty / placeholder ── */
+    .placeholder {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 32px;
+    }
+
+    /* ── Risk meter ── */
+    .risk-bar-wrap { margin-top: 8px; }
+    .risk-bar-track {
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(to right, #0ea86a, #e09800, #d94040);
+      position: relative;
+    }
+    .risk-bar-needle {
+      position: absolute;
+      top: -4px;
+      width: 4px;
+      height: 16px;
+      background: var(--text);
+      border-radius: 2px;
+      transform: translateX(-50%);
+      transition: left 0.4s;
+    }
+    .risk-labels { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--muted); margin-top: 4px; }
+
+    .empty-row td { text-align: center; color: var(--muted); padding: 20px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Portfolio Builder</h1>
+    <p>Add ETFs, set allocations, and analyse portfolio risk &amp; cost</p>
+  </div>
+  <a class="nav-link" href="index.html">← ETF Dashboard</a>
+</div>
+
+<!-- ── Summary cards ── -->
+<div class="summary-cards">
+  <div class="stat-card card-teal">
+    <div class="label">Total Invested</div>
+    <div class="value" id="card-total">$0</div>
+    <div class="sub" id="card-etfs">0 ETFs</div>
+  </div>
+  <div class="stat-card card-navy">
+    <div class="label">Weighted Beta</div>
+    <div class="value" id="card-beta">—</div>
+    <div class="sub">vs S&amp;P 500</div>
+  </div>
+  <div class="stat-card card-orange">
+    <div class="label">Avg Expense Ratio</div>
+    <div class="value" id="card-er">—</div>
+    <div class="sub" id="card-annual-cost">annual cost on investment</div>
+  </div>
+  <div class="stat-card card-green">
+    <div class="label">Weighted 1Y Return</div>
+    <div class="value" id="card-1y">—</div>
+    <div class="sub">allocation-weighted avg</div>
+  </div>
+  <div class="stat-card card-pink">
+    <div class="label">Weighted 5Y Return</div>
+    <div class="value" id="card-5y">—</div>
+    <div class="sub">allocation-weighted avg</div>
+  </div>
+</div>
+
+<!-- ── Builder table ── -->
+<div class="panel">
+  <div class="panel-title">Portfolio Holdings</div>
+  <div style="overflow-x:auto">
+    <table class="builder-table">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Name</th>
+          <th>Asset Class</th>
+          <th>Geography</th>
+          <th>Beta</th>
+          <th>1Y Ret</th>
+          <th>3Y Ret</th>
+          <th>5Y Ret</th>
+          <th>Rating</th>
+          <th>Amount ($)</th>
+          <th>Alloc %</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="portfolio-body">
+        <tr class="empty-row"><td colspan="12">Add your first ETF below</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="table-actions">
+    <button class="btn btn-accent" id="add-row-btn">+ Add ETF</button>
+    <button class="btn btn-ghost" id="clear-btn">Clear all</button>
+    <span id="alloc-warning" style="font-size:0.8rem;color:var(--yellow);font-weight:600;margin-left:8px;display:none">
+      ⚠ Allocations don't add up to 100%
+    </span>
+  </div>
+</div>
+
+<!-- ── Risk meter ── -->
+<div class="panel">
+  <div class="panel-title">Portfolio Risk (Beta)</div>
+  <div id="risk-placeholder" class="placeholder">Add ETFs to see risk level</div>
+  <div id="risk-content" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+      <span style="font-size:0.85rem;color:var(--muted)">Weighted Beta</span>
+      <span id="risk-beta-val" style="font-size:1.4rem;font-weight:700"></span>
+    </div>
+    <div class="risk-bar-wrap">
+      <div class="risk-bar-track"><div class="risk-bar-needle" id="risk-needle"></div></div>
+      <div class="risk-labels"><span>Low (&lt;0.5)</span><span>Moderate (1.0)</span><span>High (&gt;1.5)</span></div>
+    </div>
+    <p id="risk-description" style="font-size:0.82rem;color:var(--muted);margin-top:10px"></p>
+  </div>
+</div>
+
+<!-- ── Charts ── -->
+<div class="charts-row">
+  <div class="chart-panel">
+    <div class="panel-title">Geography Spread</div>
+    <div class="chart-wrap"><canvas id="chart-geo"></canvas></div>
+  </div>
+  <div class="chart-panel">
+    <div class="panel-title">Asset Class Spread</div>
+    <div class="chart-wrap"><canvas id="chart-asset"></canvas></div>
+  </div>
+  <div class="chart-panel">
+    <div class="panel-title">Returns Comparison (1Y)</div>
+    <div class="chart-wrap"><canvas id="chart-returns"></canvas></div>
+  </div>
+</div>
+
+<!-- ── Cost projection ── -->
+<div class="panel">
+  <div class="panel-title">Cost Drag Projection</div>
+  <div id="cost-placeholder" class="placeholder">Enter investment amounts to see cost projections</div>
+  <div id="cost-content" style="display:none">
+    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:12px">Assumes constant allocation and no compounding of fees. Expense ratios drag on total return each year.</p>
+    <table class="cost-table">
+      <thead>
+        <tr>
+          <th>ETF</th>
+          <th>Expense Ratio</th>
+          <th>1Y Cost</th>
+          <th>5Y Cost</th>
+          <th>10Y Cost</th>
+          <th>20Y Cost</th>
+        </tr>
+      </thead>
+      <tbody id="cost-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// ── Load CSV ─────────────────────────────────────────────────────────────────
+const CSV_FILE = 'ETF Long List - ETF Database.csv';
+let etfMap = {};   // symbol -> row object
+
+async function loadData() {
+  const res  = await fetch(CSV_FILE);
+  const text = await res.text();
+  const [headerLine, ...lines] = text.trim().split('\n');
+  const headers = headerLine.split(',').map(h => h.trim());
+  lines.forEach(line => {
+    const vals = splitCSV(line);
+    const obj  = {};
+    headers.forEach((h, i) => obj[h] = (vals[i] || '').trim());
+    if (obj['Symbol']) etfMap[obj['Symbol'].toUpperCase()] = obj;
+  });
+}
+
+function splitCSV(line) {
+  const result = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur); cur = ''; }
+    else cur += c;
+  }
+  result.push(cur);
+  return result;
+}
+
+// ── Portfolio state ───────────────────────────────────────────────────────────
+let rows = [];    // [{id, symbol, amount}]
+let nextId = 1;
+
+const CHART_COLORS = [
+  '#00b4c5','#e0297a','#0ea86a','#f5a623','#3a6bc4',
+  '#9b59b6','#e74c3c','#1abc9c','#f39c12','#2980b9'
+];
+
+// ── Charts ───────────────────────────────────────────────────────────────────
+let geoChart, assetChart, returnsChart;
+
+function initCharts() {
+  const donutOpts = (title) => ({
+    type: 'doughnut',
+    data: { labels: [], datasets: [{ data: [], backgroundColor: CHART_COLORS, borderWidth: 1 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 12, padding: 8 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%` } }
+      }
+    }
+  });
+
+  geoChart    = new Chart(document.getElementById('chart-geo'),    donutOpts('Geography'));
+  assetChart  = new Chart(document.getElementById('chart-asset'),  donutOpts('Asset Class'));
+  returnsChart = new Chart(document.getElementById('chart-returns'), {
+    type: 'bar',
+    data: { labels: [], datasets: [{ label: '1Y Return %', data: [], backgroundColor: [], borderRadius: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { ticks: { callback: v => v + '%', font: { size: 10 } }, grid: { color: '#e4e7ec' } },
+        x: { ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+function updateDonut(chart, dataMap) {
+  const labels = Object.keys(dataMap);
+  const values = labels.map(l => dataMap[l]);
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = values;
+  chart.data.datasets[0].backgroundColor = CHART_COLORS.slice(0, labels.length);
+  chart.update();
+}
+
+// ── Core recalc ──────────────────────────────────────────────────────────────
+function pct(str) {
+  if (!str) return null;
+  const n = parseFloat(str.replace('%',''));
+  return isNaN(n) ? null : n;
+}
+function num(str) {
+  if (!str) return null;
+  const n = parseFloat(str.replace(/[^0-9.\-]/g,''));
+  return isNaN(n) ? null : n;
+}
+function fmt(n, decimals=2, suffix='') {
+  if (n === null || isNaN(n)) return '—';
+  return n.toFixed(decimals) + suffix;
+}
+function fmtDollar(n) {
+  if (n === null || isNaN(n)) return '—';
+  return '$' + n.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0});
+}
+function fmtK(n) {
+  if (n === null || isNaN(n)) return '—';
+  if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1) + 'k';
+  return '$' + n.toFixed(0);
+}
+
+function recalc() {
+  const validRows = rows.filter(r => r.symbol && etfMap[r.symbol]);
+  const totalInvested = rows.reduce((s,r) => s + (r.amount || 0), 0);
+
+  // per-row alloc %
+  rows.forEach(r => {
+    r.allocPct = totalInvested > 0 && r.amount ? (r.amount / totalInvested * 100) : 0;
+  });
+
+  // ── Summary cards
+  document.getElementById('card-total').textContent = fmtDollar(totalInvested);
+  document.getElementById('card-etfs').textContent  = validRows.length + ' ETF' + (validRows.length !== 1 ? 's' : '');
+
+  if (validRows.length === 0 || totalInvested === 0) {
+    ['card-beta','card-er','card-1y','card-5y'].forEach(id => document.getElementById(id).textContent = '—');
+    document.getElementById('card-annual-cost').textContent = 'annual cost on investment';
+    showRisk(null);
+    updateDonut(geoChart, {});
+    updateDonut(assetChart, {});
+    returnsChart.data.labels = [];
+    returnsChart.data.datasets[0].data = [];
+    returnsChart.update();
+    document.getElementById('cost-placeholder').style.display = '';
+    document.getElementById('cost-content').style.display = 'none';
+    return;
+  }
+
+  let wBeta=0, wER=0, w1Y=0, w5Y=0;
+  let wBetaW=0, wERW=0, w1YW=0, w5YW=0;
+  const geoMap={}, assetMap={};
+
+  validRows.forEach(r => {
+    const d = etfMap[r.symbol];
+    const w = r.allocPct / 100;
+
+    const beta = num(d['Beta']);
+    if (beta !== null) { wBeta += beta * w; wBetaW += w; }
+
+    // Expense ratio: check common column names
+    const erRaw = d['Expense Ratio'] || d['Expense Ratio %'] || d['Net Expense Ratio'] || '';
+    const er = pct(erRaw) ?? num(erRaw);
+    if (er !== null) { wER += er * w; wERW += w; }
+
+    const r1y = pct(d['1 Year']) ?? pct(d['1Y']) ?? pct(d['1 Year Return']) ?? pct(d['1 Year Ret']) ?? num(d['1 Year']);
+    if (r1y !== null) { w1Y += r1y * w; w1YW += w; }
+
+    const r5y = pct(d['5 Year']) ?? pct(d['5Y']) ?? pct(d['5 Year Return']) ?? num(d['5 Year']);
+    if (r5y !== null) { w5Y += r5y * w; w5YW += w; }
+
+    const geo = d['Geography'] || 'Unknown';
+    geoMap[geo] = (geoMap[geo] || 0) + r.allocPct;
+
+    const ac = d['Asset Class'] || 'Unknown';
+    assetMap[ac] = (assetMap[ac] || 0) + r.allocPct;
+  });
+
+  const avgBeta = wBetaW > 0 ? wBeta / wBetaW : null;
+  const avgER   = wERW   > 0 ? wER   / wERW   : null;
+  const avg1Y   = w1YW   > 0 ? w1Y   / w1YW   : null;
+  const avg5Y   = w5YW   > 0 ? w5Y   / w5YW   : null;
+
+  document.getElementById('card-beta').textContent = fmt(avgBeta);
+  document.getElementById('card-er').textContent   = avgER !== null ? fmt(avgER, 2, '%') : '—';
+  document.getElementById('card-1y').textContent   = avg1Y !== null ? fmt(avg1Y, 1, '%') : '—';
+  document.getElementById('card-5y').textContent   = avg5Y !== null ? fmt(avg5Y, 1, '%') : '—';
+
+  if (avgER !== null) {
+    const annualCost = totalInvested * (avgER / 100);
+    document.getElementById('card-annual-cost').textContent = fmtDollar(annualCost) + ' annual fee drag';
+  }
+
+  showRisk(avgBeta);
+  updateDonut(geoChart, geoMap);
+  updateDonut(assetChart, assetMap);
+
+  // Returns bar chart
+  returnsChart.data.labels = validRows.map(r => r.symbol);
+  returnsChart.data.datasets[0].data = validRows.map(r => {
+    const d = etfMap[r.symbol];
+    return pct(d['1 Year']) ?? pct(d['1Y']) ?? num(d['1 Year']) ?? 0;
+  });
+  returnsChart.data.datasets[0].backgroundColor = validRows.map((_,i) => CHART_COLORS[i % CHART_COLORS.length]);
+  returnsChart.update();
+
+  // Cost table
+  renderCostTable(validRows, totalInvested);
+
+  // Alloc warning
+  const totalPct = rows.reduce((s,r) => s + (r.allocPct||0), 0);
+  const warn = document.getElementById('alloc-warning');
+  warn.style.display = (totalInvested > 0 && Math.abs(totalPct - 100) > 0.5) ? '' : 'none';
+}
+
+function showRisk(beta) {
+  const placeholder = document.getElementById('risk-placeholder');
+  const content     = document.getElementById('risk-content');
+  if (beta === null) {
+    placeholder.style.display = ''; content.style.display = 'none'; return;
+  }
+  placeholder.style.display = 'none'; content.style.display = '';
+  document.getElementById('risk-beta-val').textContent = beta.toFixed(2);
+  // map beta 0–2 to 0–100%
+  const pctPos = Math.min(Math.max((beta / 2) * 100, 2), 98);
+  document.getElementById('risk-needle').style.left = pctPos + '%';
+  const desc = beta < 0.5
+    ? 'Low volatility portfolio — tends to move less than the market. Suitable for conservative investors.'
+    : beta < 0.85
+    ? 'Below-market volatility. Relatively defensive allocation.'
+    : beta < 1.15
+    ? 'Market-like volatility. Portfolio tends to move broadly in line with the S&P 500.'
+    : beta < 1.5
+    ? 'Above-market volatility. Higher potential returns but greater drawdown risk.'
+    : 'High volatility portfolio — significantly more reactive than the market. Suitable for aggressive risk tolerance only.';
+  document.getElementById('risk-description').textContent = desc;
+}
+
+function renderCostTable(validRows, totalInvested) {
+  const tbody = document.getElementById('cost-body');
+  tbody.innerHTML = '';
+
+  if (totalInvested === 0) {
+    document.getElementById('cost-placeholder').style.display = '';
+    document.getElementById('cost-content').style.display = 'none';
+    return;
+  }
+  document.getElementById('cost-placeholder').style.display = 'none';
+  document.getElementById('cost-content').style.display = '';
+
+  let tot1=0,tot5=0,tot10=0,tot20=0;
+
+  validRows.forEach(r => {
+    const d  = etfMap[r.symbol];
+    const erRaw = d['Expense Ratio'] || d['Expense Ratio %'] || d['Net Expense Ratio'] || '';
+    const er = (pct(erRaw) ?? num(erRaw) ?? 0) / 100;
+    const invested = r.amount || 0;
+
+    const c1  = invested * er;
+    const c5  = c1 * 5;
+    const c10 = c1 * 10;
+    const c20 = c1 * 20;
+    tot1+=c1; tot5+=c5; tot10+=c10; tot20+=c20;
+
+    const erPct = er * 100;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.symbol}</td>
+      <td style="text-align:right">${erPct > 0 ? erPct.toFixed(2)+'%' : '—'}</td>
+      <td style="text-align:right;color:var(--red)">${fmtK(c1)}</td>
+      <td style="text-align:right;color:var(--red)">${fmtK(c5)}</td>
+      <td style="text-align:right;color:var(--red)">${fmtK(c10)}</td>
+      <td style="text-align:right;color:var(--red)">${fmtK(c20)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  const totRow = document.createElement('tr');
+  totRow.innerHTML = `
+    <td>Total</td><td></td>
+    <td>${fmtK(tot1)}</td>
+    <td>${fmtK(tot5)}</td>
+    <td>${fmtK(tot10)}</td>
+    <td>${fmtK(tot20)}</td>`;
+  tbody.appendChild(totRow);
+}
+
+// ── Row rendering ─────────────────────────────────────────────────────────────
+function ratingPill(r) {
+  if (!r) return '<span class="pill pill-grey">—</span>';
+  if (r.startsWith('A')) return `<span class="pill pill-green">${r}</span>`;
+  if (r.startsWith('B')) return `<span class="pill pill-yellow">${r}</span>`;
+  return `<span class="pill pill-red">${r}</span>`;
+}
+
+function renderRows() {
+  const tbody = document.getElementById('portfolio-body');
+  tbody.innerHTML = '';
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="12">Add your first ETF below</td></tr>';
+    return;
+  }
+
+  rows.forEach(r => {
+    const d   = r.symbol ? etfMap[r.symbol] : null;
+    const tr  = document.createElement('tr');
+
+    const betaVal = d ? (num(d['Beta']) !== null ? num(d['Beta']).toFixed(2) : '—') : '—';
+    const r1y = d ? (pct(d['1 Year']) ?? pct(d['1Y']) ?? num(d['1 Year'])) : null;
+    const r3y = d ? (pct(d['3 Year']) ?? pct(d['3Y']) ?? num(d['3 Year'])) : null;
+    const r5y = d ? (pct(d['5 Year']) ?? pct(d['5Y']) ?? num(d['5 Year'])) : null;
+
+    function retCell(v) {
+      if (v === null) return '—';
+      const col = v >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<span style="color:${col};font-weight:600">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
+    }
+
+    tr.innerHTML = `
+      <td>
+        <input class="sym-input ${d ? 'ok' : (r.symbol ? 'error' : '')}"
+               data-id="${r.id}" value="${r.symbol || ''}" placeholder="SPY" />
+      </td>
+      <td class="etf-name-cell" title="${d ? d['ETF Name'] : ''}">${d ? d['ETF Name'] : (r.symbol ? '⚠ Not found' : '')}</td>
+      <td>${d ? (d['Asset Class'] || '—') : '—'}</td>
+      <td>${d ? (d['Geography'] || '—') : '—'}</td>
+      <td>${betaVal}</td>
+      <td>${retCell(r1y)}</td>
+      <td>${retCell(r3y)}</td>
+      <td>${retCell(r5y)}</td>
+      <td>${d ? ratingPill(d['Returns Rating']) : '—'}</td>
+      <td>
+        <input class="alloc-input" data-id="${r.id}" type="number" min="0"
+               value="${r.amount || ''}" placeholder="10000" />
+      </td>
+      <td class="alloc-pct">${r.allocPct !== undefined && r.allocPct > 0 ? r.allocPct.toFixed(1)+'%' : '—'}</td>
+      <td><button class="btn-danger" data-remove="${r.id}" title="Remove">×</button></td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Symbol input listeners
+  tbody.querySelectorAll('.sym-input').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const id  = +e.target.dataset.id;
+      const sym = e.target.value.trim().toUpperCase();
+      const row = rows.find(r => r.id === id);
+      if (row) { row.symbol = sym; renderRows(); recalc(); }
+    });
+  });
+
+  // Amount input listeners
+  tbody.querySelectorAll('.alloc-input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const id  = +e.target.dataset.id;
+      const row = rows.find(r => r.id === id);
+      if (row) { row.amount = parseFloat(e.target.value) || 0; recalc(); }
+    });
+  });
+
+  // Remove buttons
+  tbody.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const id = +e.target.dataset.remove;
+      rows = rows.filter(r => r.id !== id);
+      renderRows(); recalc();
+    });
+  });
+}
+
+// ── Button handlers ───────────────────────────────────────────────────────────
+document.getElementById('add-row-btn').addEventListener('click', () => {
+  rows.push({ id: nextId++, symbol: '', amount: 0 });
+  renderRows();
+  // focus the new symbol input
+  const inputs = document.querySelectorAll('.sym-input');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+});
+
+document.getElementById('clear-btn').addEventListener('click', () => {
+  if (rows.length === 0) return;
+  if (confirm('Clear all rows?')) { rows = []; renderRows(); recalc(); }
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+(async () => {
+  initCharts();
+  await loadData();
+  recalc();
+})();
+</script>
+</body>
+</html>
