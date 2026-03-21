@@ -723,12 +723,12 @@ function renderSimulation(validRows) {
 
       // Initialise sim params once
       if (r.simReturn === undefined) {
-        const csvRet = pct(d['1 Year']) ?? pct(d['1Y']) ?? num(d['1 Year']) ?? 7;
+        const csvRet = pct(d['3 Year']) ?? pct(d['3Y']) ?? num(d['3 Year']) ?? pct(d['1 Year']) ?? pct(d['1Y']) ?? num(d['1 Year']) ?? 7;
         r.simReturn = parseFloat(csvRet.toFixed(2));
       }
       if (r.simER === undefined) {
         const erRaw = d['Expense Ratio'] || d['Expense Ratio %'] || d['Net Expense Ratio'] || '';
-        r.simER = pct(erRaw) ?? num(erRaw) ?? 0;
+        r.simER = pct(erRaw) ?? num(erRaw) ?? 0.25;
       }
 
       const tr = document.createElement('tr');
