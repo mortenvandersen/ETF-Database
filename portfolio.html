@@ -392,7 +392,15 @@
     <div class="chart-wrap"><canvas id="chart-asset"></canvas></div>
   </div>
   <div class="chart-panel">
-    <div class="panel-title">Returns Comparison (1Y)</div>
+    <div class="panel-title" style="display:flex;align-items:center;gap:8px;">
+      Returns Comparison
+      <select id="returns-metric" style="font-size:0.78rem;font-weight:600;border:1px solid var(--border);border-radius:5px;padding:2px 6px;background:var(--surface2);color:var(--text);cursor:pointer;">
+        <option value="1m">1 Month</option>
+        <option value="1y" selected>1 Year</option>
+        <option value="5y">5 Year</option>
+        <option value="div">Dividend %</option>
+      </select>
+    </div>
     <div class="chart-wrap"><canvas id="chart-returns"></canvas></div>
   </div>
 </div>
@@ -476,6 +484,27 @@ let rows = [];    // [{id, symbol, amount, simReturn, simER}]
 let nextId = 1;
 
 const SAVE_KEY = 'etf-portfolio-save';
+
+let lastValidRowsForReturns = [];
+
+function updateReturnsChart(validRows) {
+  if (validRows) lastValidRowsForReturns = validRows;
+  const metric = document.getElementById('returns-metric').value;
+  const labels = lastValidRowsForReturns.map(r => r.symbol);
+  const data = lastValidRowsForReturns.map(r => {
+    const d = etfMap[r.symbol];
+    if (!d) return 0;
+    if (metric === '1m')  return pct(d['1 Month'])  ?? pct(d['1M'])  ?? num(d['1 Month'])  ?? 0;
+    if (metric === '1y')  return pct(d['1 Year'])   ?? pct(d['1Y'])  ?? num(d['1 Year'])   ?? 0;
+    if (metric === '5y')  return pct(d['5 Year'])   ?? pct(d['5Y'])  ?? num(d['5 Year'])   ?? 0;
+    if (metric === 'div') return pct(d['Annual Dividend Yield %']) ?? pct(d['Dividend Yield']) ?? num(d['Annual Dividend Yield %']) ?? 0;
+    return 0;
+  });
+  returnsChart.data.labels = labels;
+  returnsChart.data.datasets[0].data = data;
+  returnsChart.data.datasets[0].backgroundColor = labels.map((_,i) => CHART_COLORS[i % CHART_COLORS.length]);
+  returnsChart.update();
+}
 
 function savePortfolio() {
   localStorage.setItem(SAVE_KEY, JSON.stringify(rows));
@@ -661,13 +690,7 @@ function recalc() {
   updateDonut(assetChart, assetMap);
 
   // Returns bar chart
-  returnsChart.data.labels = validRows.map(r => r.symbol);
-  returnsChart.data.datasets[0].data = validRows.map(r => {
-    const d = etfMap[r.symbol];
-    return pct(d['1 Year']) ?? pct(d['1Y']) ?? num(d['1 Year']) ?? 0;
-  });
-  returnsChart.data.datasets[0].backgroundColor = validRows.map((_,i) => CHART_COLORS[i % CHART_COLORS.length]);
-  returnsChart.update();
+  updateReturnsChart(validRows);
 
   // Simulation
   renderSimulation(validRows);
@@ -983,6 +1006,8 @@ document.getElementById('import-file').addEventListener('change', e => {
   };
   reader.readAsText(file);
 });
+
+document.getElementById('returns-metric').addEventListener('change', () => updateReturnsChart());
 
 // ── Import from ETF dashboard queue ──────────────────────────────────────────
 function importFromQueue() {
