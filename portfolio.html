@@ -208,22 +208,44 @@
     .chart-panel .panel-title { margin-bottom: 10px; }
     .chart-wrap { position: relative; height: 180px; }
 
-    /* ── Cost projection table ── */
-    .cost-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
-    .cost-table th {
-      font-size: 0.7rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--muted);
-      font-weight: 700;
+    /* ── Simulation ── */
+    .sim-input {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 7px;
+      font-size: 0.81rem;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+      width: 80px;
       text-align: right;
-      padding: 6px 10px;
-      border-bottom: 2px solid var(--border);
     }
-    .cost-table th:first-child { text-align: left; }
-    .cost-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: right; }
-    .cost-table td:first-child { text-align: left; font-weight: 600; }
-    .cost-table tr:last-child td { border-bottom: none; font-weight: 700; color: var(--red); }
+    .sim-input:focus { border-color: var(--accent); background: #fff; }
+
+    .sim-assume-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 20px; }
+    .sim-assume-table th {
+      font-size: 0.69rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted);
+      border-bottom: 2px solid var(--border); padding: 7px 10px; text-align: left;
+    }
+    .sim-assume-table th:not(:first-child):not(:nth-child(2)) { text-align: right; }
+    .sim-assume-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .sim-assume-table td:not(:first-child):not(:nth-child(2)) { text-align: right; }
+    .sim-assume-table tr:last-child td { border-bottom: none; }
+
+    .sim-out-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .sim-out-table th {
+      font-size: 0.67rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--muted);
+      border-bottom: 2px solid var(--border); padding: 7px 8px;
+      text-align: right; white-space: nowrap;
+    }
+    .sim-out-table th:first-child { text-align: left; }
+    .sim-out-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+    .sim-out-table td:first-child { text-align: left; font-weight: 700; color: var(--muted); }
+    .sim-out-table tr:last-child td { border-bottom: none; }
+    .sim-out-table .total-col { font-weight: 700; }
+    .sim-chart-wrap { position: relative; height: 220px; margin-bottom: 20px; }
 
     /* ── Empty / placeholder ── */
     .placeholder {
@@ -363,25 +385,44 @@
   </div>
 </div>
 
-<!-- ── Cost projection ── -->
+<!-- ── 10-Year Simulation ── -->
 <div class="panel">
-  <div class="panel-title">Cost Drag Projection</div>
-  <div id="cost-placeholder" class="placeholder">Enter investment amounts to see cost projections</div>
-  <div id="cost-content" style="display:none">
-    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:12px">Assumes constant allocation and no compounding of fees. Expense ratios drag on total return each year.</p>
-    <table class="cost-table">
-      <thead>
-        <tr>
-          <th>ETF</th>
-          <th>Expense Ratio</th>
-          <th>1Y Cost</th>
-          <th>5Y Cost</th>
-          <th>10Y Cost</th>
-          <th>20Y Cost</th>
-        </tr>
-      </thead>
-      <tbody id="cost-body"></tbody>
-    </table>
+  <div class="panel-title">10-Year Return Simulation</div>
+  <div id="sim-placeholder" class="placeholder">Add ETFs to the portfolio to run the simulation</div>
+  <div id="sim-content" style="display:none">
+    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:14px">
+      Set an assumed annual gross return and expense ratio for each ETF.
+      Net return = Gross Return − Expense Ratio, compounded annually.
+      Pre-filled from CSV where available.
+    </p>
+
+    <!-- Assumptions input table -->
+    <div style="overflow-x:auto">
+      <table class="sim-assume-table">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Name</th>
+            <th>Initial ($)</th>
+            <th>Annual Return %</th>
+            <th>Expense Ratio %</th>
+            <th>Net Return %</th>
+          </tr>
+        </thead>
+        <tbody id="sim-assume-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Growth chart -->
+    <div class="sim-chart-wrap"><canvas id="chart-sim"></canvas></div>
+
+    <!-- Year-by-year output -->
+    <div style="overflow-x:auto">
+      <table class="sim-out-table">
+        <thead><tr id="sim-out-head"></tr></thead>
+        <tbody id="sim-out-body"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -425,7 +466,7 @@ const CHART_COLORS = [
 ];
 
 // ── Charts ───────────────────────────────────────────────────────────────────
-let geoChart, assetChart, returnsChart;
+let geoChart, assetChart, returnsChart, simChart;
 
 function initCharts() {
   const donutOpts = (title) => ({
@@ -442,6 +483,23 @@ function initCharts() {
 
   geoChart    = new Chart(document.getElementById('chart-geo'),    donutOpts('Geography'));
   assetChart  = new Chart(document.getElementById('chart-asset'),  donutOpts('Asset Class'));
+  simChart = new Chart(document.getElementById('chart-sim'), {
+    type: 'line',
+    data: { labels: ['Year 0','Year 1','Year 2','Year 3','Year 4','Year 5','Year 6','Year 7','Year 8','Year 9','Year 10'], datasets: [] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 14, padding: 10 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtDollar(ctx.parsed.y)}` } }
+      },
+      scales: {
+        y: { ticks: { callback: v => '$' + (v>=1000 ? (v/1000).toFixed(0)+'k' : v), font:{size:10} }, grid:{color:'#e4e7ec'} },
+        x: { ticks: { font: {size:10} } }
+      }
+    }
+  });
+
   returnsChart = new Chart(document.getElementById('chart-returns'), {
     type: 'bar',
     data: { labels: [], datasets: [{ label: '1Y Return %', data: [], backgroundColor: [], borderRadius: 4 }] },
@@ -494,16 +552,21 @@ function recalc() {
   const validRows = rows.filter(r => r.symbol && etfMap[r.symbol]);
   const totalInvested = rows.reduce((s,r) => s + (r.amount || 0), 0);
 
-  // per-row alloc %
+  // per-row alloc % (fall back to equal weight when no amounts entered)
+  const equalWeight = validRows.length > 0 ? 100 / validRows.length : 0;
   rows.forEach(r => {
-    r.allocPct = totalInvested > 0 && r.amount ? (r.amount / totalInvested * 100) : 0;
+    if (totalInvested > 0) {
+      r.allocPct = r.amount ? (r.amount / totalInvested * 100) : 0;
+    } else {
+      r.allocPct = (r.symbol && etfMap[r.symbol]) ? equalWeight : 0;
+    }
   });
 
   // ── Summary cards
   document.getElementById('card-total').textContent = fmtDollar(totalInvested);
   document.getElementById('card-etfs').textContent  = validRows.length + ' ETF' + (validRows.length !== 1 ? 's' : '');
 
-  if (validRows.length === 0 || totalInvested === 0) {
+  if (validRows.length === 0) {
     ['card-beta','card-er','card-1y','card-5y'].forEach(id => document.getElementById(id).textContent = '—');
     document.getElementById('card-annual-cost').textContent = 'annual cost on investment';
     showRisk(null);
@@ -512,8 +575,8 @@ function recalc() {
     returnsChart.data.labels = [];
     returnsChart.data.datasets[0].data = [];
     returnsChart.update();
-    document.getElementById('cost-placeholder').style.display = '';
-    document.getElementById('cost-content').style.display = 'none';
+    document.getElementById('sim-placeholder').style.display = '';
+    document.getElementById('sim-content').style.display = 'none';
     return;
   }
 
@@ -574,8 +637,8 @@ function recalc() {
   returnsChart.data.datasets[0].backgroundColor = validRows.map((_,i) => CHART_COLORS[i % CHART_COLORS.length]);
   returnsChart.update();
 
-  // Cost table
-  renderCostTable(validRows, totalInvested);
+  // Simulation
+  renderSimulation(validRows);
 
   // Alloc warning
   const totalPct = rows.reduce((s,r) => s + (r.allocPct||0), 0);
@@ -606,52 +669,146 @@ function showRisk(beta) {
   document.getElementById('risk-description').textContent = desc;
 }
 
-function renderCostTable(validRows, totalInvested) {
-  const tbody = document.getElementById('cost-body');
-  tbody.innerHTML = '';
+function renderSimulation(validRows) {
+  const placeholder = document.getElementById('sim-placeholder');
+  const content     = document.getElementById('sim-content');
 
-  if (totalInvested === 0) {
-    document.getElementById('cost-placeholder').style.display = '';
-    document.getElementById('cost-content').style.display = 'none';
-    return;
+  if (validRows.length === 0) {
+    placeholder.style.display = ''; content.style.display = 'none'; return;
   }
-  document.getElementById('cost-placeholder').style.display = 'none';
-  document.getElementById('cost-content').style.display = '';
+  placeholder.style.display = 'none'; content.style.display = '';
 
-  let tot1=0,tot5=0,tot10=0,tot20=0;
+  // ── Assumptions table ─────────────────────────────────────────────────────
+  const assumeBody = document.getElementById('sim-assume-body');
+  assumeBody.innerHTML = '';
 
   validRows.forEach(r => {
-    const d  = etfMap[r.symbol];
-    const erRaw = d['Expense Ratio'] || d['Expense Ratio %'] || d['Net Expense Ratio'] || '';
-    const er = (pct(erRaw) ?? num(erRaw) ?? 0) / 100;
-    const invested = r.amount || 0;
+    const d = etfMap[r.symbol];
 
-    const c1  = invested * er;
-    const c5  = c1 * 5;
-    const c10 = c1 * 10;
-    const c20 = c1 * 20;
-    tot1+=c1; tot5+=c5; tot10+=c10; tot20+=c20;
+    // Initialise sim params on first render
+    if (r.simReturn === undefined) {
+      const csvRet = pct(d['1 Year']) ?? pct(d['1Y']) ?? num(d['1 Year']) ?? 7;
+      r.simReturn = parseFloat(csvRet.toFixed(2));
+    }
+    if (r.simER === undefined) {
+      const erRaw = d['Expense Ratio'] || d['Expense Ratio %'] || d['Net Expense Ratio'] || '';
+      r.simER = pct(erRaw) ?? num(erRaw) ?? 0;
+    }
 
-    const erPct = er * 100;
+    const net = (r.simReturn - r.simER).toFixed(2);
+    const netColor = net >= 0 ? 'var(--green)' : 'var(--red)';
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${r.symbol}</td>
-      <td style="text-align:right">${erPct > 0 ? erPct.toFixed(2)+'%' : '—'}</td>
-      <td style="text-align:right;color:var(--red)">${fmtK(c1)}</td>
-      <td style="text-align:right;color:var(--red)">${fmtK(c5)}</td>
-      <td style="text-align:right;color:var(--red)">${fmtK(c10)}</td>
-      <td style="text-align:right;color:var(--red)">${fmtK(c20)}</td>`;
-    tbody.appendChild(tr);
+      <td style="font-weight:700">${r.symbol}</td>
+      <td style="color:var(--muted);font-size:0.78rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d['ETF Name'] || ''}</td>
+      <td style="text-align:right">${r.amount ? fmtDollar(r.amount) : '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="text-align:right">
+        <input class="sim-input" type="number" step="0.1"
+               data-id="${r.id}" data-field="simReturn"
+               value="${r.simReturn}" />
+      </td>
+      <td style="text-align:right">
+        <input class="sim-input" type="number" step="0.01" min="0"
+               data-id="${r.id}" data-field="simER"
+               value="${r.simER}" />
+      </td>
+      <td style="text-align:right;font-weight:700;color:${netColor}">${net}%</td>`;
+    assumeBody.appendChild(tr);
   });
 
-  const totRow = document.createElement('tr');
-  totRow.innerHTML = `
-    <td>Total</td><td></td>
-    <td>${fmtK(tot1)}</td>
-    <td>${fmtK(tot5)}</td>
-    <td>${fmtK(tot10)}</td>
-    <td>${fmtK(tot20)}</td>`;
-  tbody.appendChild(totRow);
+  // Wire up sim input listeners
+  assumeBody.querySelectorAll('.sim-input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const id    = +e.target.dataset.id;
+      const field = e.target.dataset.field;
+      const row   = rows.find(r => r.id === id);
+      if (row) { row[field] = parseFloat(e.target.value) || 0; renderSimulation(rows.filter(r => r.symbol && etfMap[r.symbol])); }
+    });
+  });
+
+  // ── Year-by-year calculation ───────────────────────────────────────────────
+  const YEARS = 10;
+
+  // balances[rowIndex][year] = dollar value
+  const balances = validRows.map(r => {
+    const initial = r.amount || 0;
+    const net = ((r.simReturn || 0) - (r.simER || 0)) / 100;
+    return Array.from({ length: YEARS + 1 }, (_, y) => initial * Math.pow(1 + net, y));
+  });
+
+  // portfolio total per year
+  const portfolioByYear = Array.from({ length: YEARS + 1 }, (_, y) =>
+    balances.reduce((s, b) => s + b[y], 0)
+  );
+
+  // ── Line chart ────────────────────────────────────────────────────────────
+  const labels = Array.from({ length: YEARS + 1 }, (_, y) => y === 0 ? 'Start' : `Yr ${y}`);
+  simChart.data.labels = labels;
+  simChart.data.datasets = [
+    ...validRows.map((r, i) => ({
+      label: r.symbol,
+      data: balances[i],
+      borderColor: CHART_COLORS[i % CHART_COLORS.length],
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      pointRadius: 3,
+      tension: 0.3
+    })),
+    {
+      label: 'Portfolio Total',
+      data: portfolioByYear,
+      borderColor: '#1e2a38',
+      backgroundColor: 'transparent',
+      borderWidth: 2.5,
+      borderDash: [5, 3],
+      pointRadius: 3,
+      tension: 0.3
+    }
+  ];
+  simChart.update();
+
+  // ── Output table ──────────────────────────────────────────────────────────
+  const head = document.getElementById('sim-out-head');
+  const body = document.getElementById('sim-out-body');
+  head.innerHTML = '';
+  body.innerHTML = '';
+
+  // Header: Year | ETF1 $ | ETF1 % | ETF2 $ | ETF2 % | ... | Total $ | Total %
+  head.innerHTML = '<th>Year</th>' +
+    validRows.map(r => `<th colspan="2">${r.symbol}</th>`).join('') +
+    '<th colspan="2">Portfolio Total</th>';
+
+  // Sub-header row for $ / %
+  const subHead = document.createElement('tr');
+  subHead.style.cssText = 'background:var(--surface2)';
+  subHead.innerHTML = '<td style="font-size:0.68rem;color:var(--muted);text-align:left">—</td>' +
+    validRows.map(() => '<td style="font-size:0.68rem;color:var(--muted)">Balance ($)</td><td style="font-size:0.68rem;color:var(--muted)">Return (%)</td>').join('') +
+    '<td style="font-size:0.68rem;color:var(--muted)">Balance ($)</td><td style="font-size:0.68rem;color:var(--muted)">Return (%)</td>';
+  body.appendChild(subHead);
+
+  for (let y = 1; y <= YEARS; y++) {
+    const tr = document.createElement('tr');
+    let html = `<td>Year ${y}</td>`;
+
+    validRows.forEach((r, i) => {
+      const initial = r.amount || 0;
+      const bal = balances[i][y];
+      const retPct = initial > 0 ? ((bal / initial - 1) * 100) : 0;
+      const col = retPct >= 0 ? 'var(--green)' : 'var(--red)';
+      html += `<td>${initial > 0 ? fmtDollar(bal) : '—'}</td>`;
+      html += `<td style="color:${col};font-weight:600">${initial > 0 ? (retPct >= 0 ? '+' : '') + retPct.toFixed(1) + '%' : '—'}</td>`;
+    });
+
+    const totalInit = validRows.reduce((s, r) => s + (r.amount || 0), 0);
+    const totalBal  = portfolioByYear[y];
+    const totalRet  = totalInit > 0 ? ((totalBal / totalInit - 1) * 100) : 0;
+    const tcol      = totalRet >= 0 ? 'var(--green)' : 'var(--red)';
+    html += `<td class="total-col">${totalInit > 0 ? fmtDollar(totalBal) : '—'}</td>`;
+    html += `<td class="total-col" style="color:${tcol}">${totalInit > 0 ? (totalRet >= 0 ? '+' : '') + totalRet.toFixed(1) + '%' : '—'}</td>`;
+
+    tr.innerHTML = html;
+    body.appendChild(tr);
+  }
 }
 
 // ── Row rendering ─────────────────────────────────────────────────────────────
