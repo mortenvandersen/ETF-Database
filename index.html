@@ -231,6 +231,14 @@
     td { padding: 10px 14px; white-space: nowrap; color: var(--text); }
 
     .symbol { font-weight: 700; color: var(--accent); font-size: 0.88rem; }
+    .add-btn {
+      padding: 3px 9px; font-size: 0.75rem; font-weight: 600;
+      border: 1px solid var(--accent); border-radius: 5px;
+      background: transparent; color: var(--accent); cursor: pointer;
+      white-space: nowrap; line-height: 1.6; transition: background .15s, color .15s;
+    }
+    .add-btn:hover { background: var(--accent); color: #fff; }
+    .add-btn.added { background: var(--green); border-color: var(--green); color: #fff; cursor: default; }
     .etf-name { max-width: 240px; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
 
     /* Return coloring */
@@ -447,6 +455,7 @@
         <th data-col="# of Holdings" class="ret">Holdings <span class="sort-arrow">↕</span></th>
         <th data-col="Returns Rating">Rating <span class="sort-arrow">↕</span></th>
         <th data-col="Primary Category">Category <span class="sort-arrow">↕</span></th>
+        <th style="width:1%"></th>
       </tr>
     </thead>
     <tbody id="table-body"></tbody>
@@ -724,8 +733,25 @@ function render() {
       <td style="text-align:right;color:var(--muted)">${d['# of Holdings'] || '—'}</td>
       <td>${fmtRating(d['Returns Rating'])}</td>
       <td style="font-size:.8rem;color:var(--muted)">${d['Primary Category'] || '—'}</td>
+      <td><button class="add-btn" data-sym="${d['Symbol']}">+ Portfolio</button></td>
     </tr>
   `).join('');
+
+  // Wire up add-to-portfolio buttons
+  tbody.querySelectorAll('.add-btn').forEach(btn => {
+    const sym = btn.dataset.sym;
+    if (portfolioQueue().includes(sym)) { btn.textContent = '✓ Added'; btn.classList.add('added'); }
+    btn.addEventListener('click', () => {
+      if (btn.classList.contains('added')) return;
+      const q = portfolioQueue();
+      if (!q.includes(sym)) { q.push(sym); localStorage.setItem('etf-portfolio-queue', JSON.stringify(q)); }
+      btn.textContent = '✓ Added'; btn.classList.add('added');
+    });
+  });
+}
+
+function portfolioQueue() {
+  try { return JSON.parse(localStorage.getItem('etf-portfolio-queue') || '[]'); } catch { return []; }
 }
 
 // ── Sort headers ──────────────────────────────────────────────────────────────
