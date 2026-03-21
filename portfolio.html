@@ -245,7 +245,11 @@
     .sim-out-table td:first-child { text-align: left; font-weight: 700; color: var(--muted); }
     .sim-out-table tr:last-child td { border-bottom: none; }
     .sim-out-table .total-col { font-weight: 700; }
-    .sim-chart-wrap { position: relative; height: 220px; margin-bottom: 20px; }
+    .sim-charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    @media (max-width: 700px) { .sim-charts-row { grid-template-columns: 1fr; } }
+    .sim-chart-wrap { position: relative; height: 220px; }
+    .sim-chart-panel { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+    .sim-chart-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
 
     /* ── Empty / placeholder ── */
     .placeholder {
@@ -413,8 +417,17 @@
       </table>
     </div>
 
-    <!-- Growth chart -->
-    <div class="sim-chart-wrap"><canvas id="chart-sim"></canvas></div>
+    <!-- Growth charts -->
+    <div class="sim-charts-row">
+      <div class="sim-chart-panel">
+        <div class="sim-chart-label">Individual ETF Growth</div>
+        <div class="sim-chart-wrap"><canvas id="chart-sim-etfs"></canvas></div>
+      </div>
+      <div class="sim-chart-panel">
+        <div class="sim-chart-label">Portfolio Total Growth</div>
+        <div class="sim-chart-wrap"><canvas id="chart-sim-total"></canvas></div>
+      </div>
+    </div>
 
     <!-- Year-by-year output -->
     <div style="overflow-x:auto">
@@ -466,7 +479,7 @@ const CHART_COLORS = [
 ];
 
 // ── Charts ───────────────────────────────────────────────────────────────────
-let geoChart, assetChart, returnsChart, simChart;
+let geoChart, assetChart, returnsChart, simEtfsChart, simTotalChart;
 
 function initCharts() {
   const donutOpts = (title) => ({
@@ -483,22 +496,24 @@ function initCharts() {
 
   geoChart    = new Chart(document.getElementById('chart-geo'),    donutOpts('Geography'));
   assetChart  = new Chart(document.getElementById('chart-asset'),  donutOpts('Asset Class'));
-  simChart = new Chart(document.getElementById('chart-sim'), {
+  const simLineOpts = () => ({
     type: 'line',
-    data: { labels: ['Year 0','Year 1','Year 2','Year 3','Year 4','Year 5','Year 6','Year 7','Year 8','Year 9','Year 10'], datasets: [] },
+    data: { labels: [], datasets: [] },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 14, padding: 10 } },
+        legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 14, padding: 8 } },
         tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtDollar(ctx.parsed.y)}` } }
       },
       scales: {
-        y: { ticks: { callback: v => '$' + (v>=1000 ? (v/1000).toFixed(0)+'k' : v), font:{size:10} }, grid:{color:'#e4e7ec'} },
-        x: { ticks: { font: {size:10} } }
+        y: { ticks: { callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v), font: { size: 10 } }, grid: { color: '#e4e7ec' } },
+        x: { ticks: { font: { size: 10 } } }
       }
     }
   });
+  simEtfsChart  = new Chart(document.getElementById('chart-sim-etfs'),  simLineOpts());
+  simTotalChart = new Chart(document.getElementById('chart-sim-total'), simLineOpts());
 
   returnsChart = new Chart(document.getElementById('chart-returns'), {
     type: 'bar',
@@ -764,31 +779,35 @@ function updateSimOutput(validRows) {
     balances.reduce((s, b) => s + b[y], 0)
   );
 
-  // ── Line chart ────────────────────────────────────────────────────────────
+  // ── Charts ────────────────────────────────────────────────────────────────
   const labels = Array.from({ length: YEARS + 1 }, (_, y) => y === 0 ? 'Start' : `Yr ${y}`);
-  simChart.data.labels = labels;
-  simChart.data.datasets = [
-    ...validRows.map((r, i) => ({
-      label: r.symbol,
-      data: balances[i],
-      borderColor: CHART_COLORS[i % CHART_COLORS.length],
-      backgroundColor: 'transparent',
-      borderWidth: 2,
-      pointRadius: 3,
-      tension: 0.3
-    })),
-    {
-      label: 'Portfolio Total',
-      data: portfolioByYear,
-      borderColor: '#1e2a38',
-      backgroundColor: 'transparent',
-      borderWidth: 2.5,
-      borderDash: [5, 3],
-      pointRadius: 3,
-      tension: 0.3
-    }
-  ];
-  simChart.update();
+
+  const etfDatasets = validRows.map((r, i) => ({
+    label: r.symbol,
+    data: balances[i],
+    borderColor: CHART_COLORS[i % CHART_COLORS.length],
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    pointRadius: 3,
+    tension: 0.3
+  }));
+
+  simEtfsChart.data.labels = labels;
+  simEtfsChart.data.datasets = etfDatasets;
+  simEtfsChart.update();
+
+  simTotalChart.data.labels = labels;
+  simTotalChart.data.datasets = [{
+    label: 'Portfolio Total',
+    data: portfolioByYear,
+    borderColor: '#00b4c5',
+    backgroundColor: 'rgba(0,180,197,0.08)',
+    borderWidth: 2.5,
+    fill: true,
+    pointRadius: 3,
+    tension: 0.3
+  }];
+  simTotalChart.update();
 
   // ── Output table ──────────────────────────────────────────────────────────
   const head = document.getElementById('sim-out-head');
