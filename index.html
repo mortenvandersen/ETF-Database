@@ -421,6 +421,7 @@
   <div class="ms-wrap" id="ms-geo"></div>
   <div class="ms-wrap" id="ms-rating"></div>
   <div class="ms-wrap" id="ms-usecase"></div>
+  <div class="ms-wrap" id="ms-provider"></div>
 
   <span class="count-label" id="row-count"></span>
 </div>
@@ -442,6 +443,7 @@
         <th data-col="5 Year" class="ret">5 Yr <span class="sort-arrow">↕</span></th>
         <th data-col="Annual Dividend Yield %" class="ret">Div Yield <span class="sort-arrow">↕</span></th>
         <th data-col="P/E Ratio" class="ret">P/E <span class="sort-arrow">↕</span></th>
+        <th data-col="Beta" class="ret">Beta <span class="sort-arrow">↕</span></th>
         <th data-col="# of Holdings" class="ret">Holdings <span class="sort-arrow">↕</span></th>
         <th data-col="Returns Rating">Rating <span class="sort-arrow">↕</span></th>
         <th data-col="Primary Category">Category <span class="sort-arrow">↕</span></th>
@@ -596,6 +598,13 @@ document.addEventListener('click', () => {
 });
 
 // ── Populate filter dropdowns ───────────────────────────────────────────────
+const PROVIDERS = ['Vanguard', 'iShares', 'Fidelity', 'State Street'];
+
+function getProvider(name) {
+  if (!name) return null;
+  return PROVIDERS.find(p => name.includes(p)) || null;
+}
+
 function populateFilters(data) {
   const unique = (key) => [...new Set(data.map(d => d[key]).filter(Boolean))].sort();
 
@@ -604,6 +613,7 @@ function populateFilters(data) {
   buildMultiSelect('ms-geo',      'Geography',        unique('Geography'));
   buildMultiSelect('ms-rating',   'Rating',           ['A','A-','B+','B','B-','C+','C','C-']);
   buildMultiSelect('ms-usecase',  'Use Case',         unique('Use Case'));
+  buildMultiSelect('ms-provider', 'Provider',         PROVIDERS);
 }
 
 // ── Pinned tickers ───────────────────────────────────────────────────────────
@@ -661,6 +671,7 @@ function getFiltered() {
   const geo      = msState['ms-geo']      || new Set();
   const rating   = msState['ms-rating']   || new Set();
   const usecase  = msState['ms-usecase']  || new Set();
+  const provider = msState['ms-provider'] || new Set();
 
   let rows = allData.filter(d => {
     if (q && !d['Symbol'].toLowerCase().includes(q) && !d['ETF Name'].toLowerCase().includes(q)) return false;
@@ -669,6 +680,7 @@ function getFiltered() {
     if (geo.size      && !geo.has(d['Geography']))          return false;
     if (rating.size   && !rating.has(d['Returns Rating']))  return false;
     if (usecase.size  && !usecase.has(d['Use Case']))       return false;
+    if (provider.size && !provider.has(getProvider(d['ETF Name']))) return false;
     return true;
   });
 
@@ -708,6 +720,7 @@ function render() {
       <td>${fmtRet(d['5 Year'])}</td>
       <td>${fmtRet(d['Annual Dividend Yield %'])}</td>
       <td style="text-align:right;color:var(--muted)">${d['P/E Ratio'] || '—'}</td>
+      <td style="text-align:right;color:var(--muted)">${d['Beta'] || '—'}</td>
       <td style="text-align:right;color:var(--muted)">${d['# of Holdings'] || '—'}</td>
       <td>${fmtRating(d['Returns Rating'])}</td>
       <td style="font-size:.8rem;color:var(--muted)">${d['Primary Category'] || '—'}</td>
