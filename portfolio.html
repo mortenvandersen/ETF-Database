@@ -397,6 +397,7 @@
       <select id="returns-metric" style="font-size:0.78rem;font-weight:600;border:1px solid var(--border);border-radius:5px;padding:2px 6px;background:var(--surface2);color:var(--text);cursor:pointer;">
         <option value="1m">1 Month</option>
         <option value="1y" selected>1 Year</option>
+        <option value="3y">3 Year</option>
         <option value="5y">5 Year</option>
         <option value="div">Dividend %</option>
       </select>
@@ -496,6 +497,7 @@ function updateReturnsChart(validRows) {
     if (!d) return 0;
     if (metric === '1m')  return pct(d['1 Month'])  ?? pct(d['1M'])  ?? num(d['1 Month'])  ?? 0;
     if (metric === '1y')  return pct(d['1 Year'])   ?? pct(d['1Y'])  ?? num(d['1 Year'])   ?? 0;
+    if (metric === '3y')  return pct(d['3 Year'])   ?? pct(d['3Y'])  ?? num(d['3 Year'])   ?? 0;
     if (metric === '5y')  return pct(d['5 Year'])   ?? pct(d['5Y'])  ?? num(d['5 Year'])   ?? 0;
     if (metric === 'div') return pct(d['Annual Dividend Yield %']) ?? pct(d['Dividend Yield']) ?? num(d['Annual Dividend Yield %']) ?? 0;
     return 0;
