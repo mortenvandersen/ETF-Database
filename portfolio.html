@@ -165,6 +165,7 @@
     .btn-accent:hover { background: #009aaa; }
     .btn-ghost    { background: transparent; border: 1px solid var(--border); color: var(--muted); }
     .btn-ghost:hover  { background: var(--surface2); color: var(--text); }
+    .btn-sm { padding: 5px 11px; font-size: 0.76rem; }
     .btn-danger   { background: transparent; color: var(--red); border: none; font-size: 1rem; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
     .btn-danger:hover { background: #fff5f5; }
 
@@ -354,6 +355,9 @@
   <div class="table-actions">
     <button class="btn btn-accent" id="add-row-btn">+ Add ETF</button>
     <button class="btn btn-ghost" id="clear-btn">Clear all</button>
+    <button class="btn btn-ghost btn-sm" id="export-btn" title="Download portfolio as JSON">↓ Export JSON</button>
+    <button class="btn btn-ghost btn-sm" id="import-btn" title="Load portfolio from JSON file">↑ Import JSON</button>
+    <input type="file" id="import-file" accept=".json" style="display:none">
     <span id="alloc-warning" style="font-size:0.8rem;color:var(--yellow);font-weight:600;margin-left:8px;display:none">
       ⚠ Allocations don't add up to 100%
     </span>
@@ -434,13 +438,6 @@
       </div>
     </div>
 
-    <!-- Year-by-year output -->
-    <div style="overflow-x:auto">
-      <table class="sim-out-table">
-        <thead><tr id="sim-out-head"></tr></thead>
-        <tbody id="sim-out-body"></tbody>
-      </table>
-    </div>
   </div>
 </div>
 
@@ -475,8 +472,23 @@ function splitCSV(line) {
 }
 
 // ── Portfolio state ───────────────────────────────────────────────────────────
-let rows = [];    // [{id, symbol, amount}]
+let rows = [];    // [{id, symbol, amount, simReturn, simER}]
 let nextId = 1;
+
+const SAVE_KEY = 'etf-portfolio-save';
+
+function savePortfolio() {
+  localStorage.setItem(SAVE_KEY, JSON.stringify(rows));
+}
+
+function loadSavedPortfolio() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || '[]');
+    if (!Array.isArray(saved) || saved.length === 0) return;
+    rows = saved;
+    nextId = Math.max(...rows.map(r => r.id), 0) + 1;
+  } catch { /* ignore corrupt data */ }
+}
 
 const CHART_COLORS = [
   '#00b4c5','#e0297a','#0ea86a','#f5a623','#3a6bc4',
@@ -745,7 +757,7 @@ function renderSimulation(validRows) {
         const id    = +e.target.dataset.id;
         const field = e.target.dataset.field;
         const row   = rows.find(r => r.id === id);
-        if (row) { row[field] = parseFloat(e.target.value) || 0; updateSimOutput(rows.filter(r => r.symbol && etfMap[r.symbol])); }
+        if (row) { row[field] = parseFloat(e.target.value) || 0; updateSimOutput(rows.filter(r => r.symbol && etfMap[r.symbol])); savePortfolio(); }
       });
     });
   } else {
@@ -828,10 +840,12 @@ function updateSimOutput(validRows) {
     return s + expenseDrag;
   }, 0);
   const retColor = netRetPct >= 0 ? 'var(--green)' : 'var(--red)';
+  const netDollar = totalInit > 0 ? totalEnd - totalInit : null;
   document.getElementById('sim-stats').innerHTML = `
     <div class="sim-stat">
       <div class="ss-label">10Y Net Return</div>
       <div class="ss-value" style="color:${retColor}">${netRetPct !== null ? (netRetPct >= 0 ? '+' : '') + netRetPct.toFixed(1) + '%' : '—'}</div>
+      <div class="ss-value" style="color:${retColor};font-size:0.9rem;margin-top:2px">${netDollar !== null ? (netDollar >= 0 ? '+' : '') + fmtDollar(netDollar) : ''}</div>
       <div class="ss-sub">${totalInit > 0 ? fmtDollar(totalInit) + ' → ' + fmtDollar(totalEnd) : 'enter amounts'}</div>
     </div>
     <div class="sim-stat">
@@ -840,48 +854,6 @@ function updateSimOutput(validRows) {
       <div class="ss-sub">over 10 years</div>
     </div>`;
 
-  // ── Output table ──────────────────────────────────────────────────────────
-  const head = document.getElementById('sim-out-head');
-  const body = document.getElementById('sim-out-body');
-  head.innerHTML = '';
-  body.innerHTML = '';
-
-  // Header: Year | ETF1 $ | ETF1 % | ETF2 $ | ETF2 % | ... | Total $ | Total %
-  head.innerHTML = '<th>Year</th>' +
-    validRows.map(r => `<th colspan="2">${r.symbol}</th>`).join('') +
-    '<th colspan="2">Portfolio Total</th>';
-
-  // Sub-header row for $ / %
-  const subHead = document.createElement('tr');
-  subHead.style.cssText = 'background:var(--surface2)';
-  subHead.innerHTML = '<td style="font-size:0.68rem;color:var(--muted);text-align:left">—</td>' +
-    validRows.map(() => '<td style="font-size:0.68rem;color:var(--muted)">Balance ($)</td><td style="font-size:0.68rem;color:var(--muted)">Return (%)</td>').join('') +
-    '<td style="font-size:0.68rem;color:var(--muted)">Balance ($)</td><td style="font-size:0.68rem;color:var(--muted)">Return (%)</td>';
-  body.appendChild(subHead);
-
-  for (let y = 1; y <= YEARS; y++) {
-    const tr = document.createElement('tr');
-    let html = `<td>Year ${y}</td>`;
-
-    validRows.forEach((r, i) => {
-      const initial = r.amount || 0;
-      const bal = balances[i][y];
-      const retPct = initial > 0 ? ((bal / initial - 1) * 100) : 0;
-      const col = retPct >= 0 ? 'var(--green)' : 'var(--red)';
-      html += `<td>${initial > 0 ? fmtDollar(bal) : '—'}</td>`;
-      html += `<td style="color:${col};font-weight:600">${initial > 0 ? (retPct >= 0 ? '+' : '') + retPct.toFixed(1) + '%' : '—'}</td>`;
-    });
-
-    const totalInit = validRows.reduce((s, r) => s + (r.amount || 0), 0);
-    const totalBal  = portfolioByYear[y];
-    const totalRet  = totalInit > 0 ? ((totalBal / totalInit - 1) * 100) : 0;
-    const tcol      = totalRet >= 0 ? 'var(--green)' : 'var(--red)';
-    html += `<td class="total-col">${totalInit > 0 ? fmtDollar(totalBal) : '—'}</td>`;
-    html += `<td class="total-col" style="color:${tcol}">${totalInit > 0 ? (totalRet >= 0 ? '+' : '') + totalRet.toFixed(1) + '%' : '—'}</td>`;
-
-    tr.innerHTML = html;
-    body.appendChild(tr);
-  }
 }
 
 // ── Row rendering ─────────────────────────────────────────────────────────────
@@ -944,7 +916,7 @@ function renderRows() {
       const id  = +e.target.dataset.id;
       const sym = e.target.value.trim().toUpperCase();
       const row = rows.find(r => r.id === id);
-      if (row) { row.symbol = sym; renderRows(); recalc(); }
+      if (row) { row.symbol = sym; renderRows(); recalc(); savePortfolio(); }
     });
   });
 
@@ -953,7 +925,7 @@ function renderRows() {
     inp.addEventListener('input', e => {
       const id  = +e.target.dataset.id;
       const row = rows.find(r => r.id === id);
-      if (row) { row.amount = parseFloat(e.target.value) || 0; recalc(); }
+      if (row) { row.amount = parseFloat(e.target.value) || 0; recalc(); savePortfolio(); }
     });
   });
 
@@ -962,7 +934,7 @@ function renderRows() {
     btn.addEventListener('click', e => {
       const id = +e.target.dataset.remove;
       rows = rows.filter(r => r.id !== id);
-      renderRows(); recalc();
+      renderRows(); recalc(); savePortfolio();
     });
   });
 }
@@ -970,15 +942,46 @@ function renderRows() {
 // ── Button handlers ───────────────────────────────────────────────────────────
 document.getElementById('add-row-btn').addEventListener('click', () => {
   rows.push({ id: nextId++, symbol: '', amount: 0 });
-  renderRows();
-  // focus the new symbol input
+  renderRows(); savePortfolio();
   const inputs = document.querySelectorAll('.sym-input');
   if (inputs.length) inputs[inputs.length - 1].focus();
 });
 
 document.getElementById('clear-btn').addEventListener('click', () => {
   if (rows.length === 0) return;
-  if (confirm('Clear all rows?')) { rows = []; renderRows(); recalc(); }
+  if (confirm('Clear all rows?')) { rows = []; renderRows(); recalc(); savePortfolio(); }
+});
+
+document.getElementById('export-btn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `portfolio-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+document.getElementById('import-btn').addEventListener('click', () => {
+  document.getElementById('import-file').click();
+});
+
+document.getElementById('import-file').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const imported = JSON.parse(ev.target.result);
+      if (!Array.isArray(imported)) throw new Error('Expected an array');
+      rows = imported;
+      nextId = Math.max(...rows.map(r => r.id), 0) + 1;
+      renderRows(); recalc(); savePortfolio();
+    } catch (err) {
+      alert(`Could not import portfolio: ${err.message}`);
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
 });
 
 // ── Import from ETF dashboard queue ──────────────────────────────────────────
@@ -995,14 +998,16 @@ function importFromQueue() {
     added++;
   });
   localStorage.removeItem('etf-portfolio-queue');
-  if (added) { renderRows(); recalc(); }
+  if (added) { renderRows(); recalc(); savePortfolio(); }
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (async () => {
   initCharts();
   await loadData();
+  loadSavedPortfolio();
   importFromQueue();
+  renderRows();
   recalc();
 })();
 
