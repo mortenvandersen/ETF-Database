@@ -250,6 +250,10 @@
     .sim-chart-wrap { position: relative; height: 220px; }
     .sim-chart-panel { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
     .sim-chart-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
+    .sim-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; text-align: center; }
+    .sim-stat .ss-label { font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; margin-bottom: 4px; }
+    .sim-stat .ss-value { font-size: 1.1rem; font-weight: 700; line-height: 1.1; }
+    .sim-stat .ss-sub { font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
 
     /* ── Empty / placeholder ── */
     .placeholder {
@@ -423,9 +427,10 @@
         <div class="sim-chart-label">Individual ETF Growth</div>
         <div class="sim-chart-wrap"><canvas id="chart-sim-etfs"></canvas></div>
       </div>
-      <div class="sim-chart-panel">
-        <div class="sim-chart-label">Portfolio Total Growth</div>
+      <div class="sim-chart-panel" style="display:grid;grid-template-columns:1fr auto;grid-template-rows:auto 1fr;gap:0 14px">
+        <div class="sim-chart-label" style="grid-column:1/3">Portfolio Total Growth</div>
         <div class="sim-chart-wrap"><canvas id="chart-sim-total"></canvas></div>
+        <div id="sim-stats" style="display:flex;flex-direction:column;gap:10px;justify-content:center;min-width:110px"></div>
       </div>
     </div>
 
@@ -808,6 +813,32 @@ function updateSimOutput(validRows) {
     tension: 0.3
   }];
   simTotalChart.update();
+
+  // ── Side stats panel ──────────────────────────────────────────────────────
+  const totalInit = validRows.reduce((s, r) => s + (r.amount || 0), 0);
+  const totalEnd  = portfolioByYear[YEARS];
+  const netRetPct = totalInit > 0 ? ((totalEnd / totalInit - 1) * 100) : null;
+  const totalExpenses = validRows.reduce((s, r) => {
+    const erDecimal = (r.simER || 0) / 100;
+    const net = ((r.simReturn || 0) - (r.simER || 0)) / 100;
+    // sum of (balance_y - balance_y+1_without_er) across years = initial * er * sum((1+net)^y)
+    const initial = r.amount || 0;
+    let expenseDrag = 0;
+    for (let y = 0; y < YEARS; y++) expenseDrag += initial * Math.pow(1 + net, y) * erDecimal;
+    return s + expenseDrag;
+  }, 0);
+  const retColor = netRetPct >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('sim-stats').innerHTML = `
+    <div class="sim-stat">
+      <div class="ss-label">10Y Net Return</div>
+      <div class="ss-value" style="color:${retColor}">${netRetPct !== null ? (netRetPct >= 0 ? '+' : '') + netRetPct.toFixed(1) + '%' : '—'}</div>
+      <div class="ss-sub">${totalInit > 0 ? fmtDollar(totalInit) + ' → ' + fmtDollar(totalEnd) : 'enter amounts'}</div>
+    </div>
+    <div class="sim-stat">
+      <div class="ss-label">Total Expenses Paid</div>
+      <div class="ss-value" style="color:var(--red)">${totalInit > 0 ? fmtDollar(totalExpenses) : '—'}</div>
+      <div class="ss-sub">over 10 years</div>
+    </div>`;
 
   // ── Output table ──────────────────────────────────────────────────────────
   const head = document.getElementById('sim-out-head');
